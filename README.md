@@ -1,91 +1,140 @@
 # popctl
 
-**Population control for GTA IV: The Complete Edition.** Keeps pedestrians and traffic alive at the
-distances you choose, instead of the distances the engine hardcodes.
+**Population control for GTA IV: The Complete Edition.** A research release: locating what actually
+removes ambient pedestrians and traffic, and moving it.
 
-One plugin, one job. Engine audio slots are handled separately by
-[revd](https://github.com/gutbash/revd); the two are independent and can be used together or apart.
+One plugin, one job. Engine audio slots are a separate limit with a separate fix,
+[revd](https://github.com/gutbash/revd). The two are independent.
 
-## The problem
+## Abstract
 
-Crowds in GTA IV evaporate a short way behind you, and no amount of `popcycle.dat` editing or density
-multiplier tuning fixes it. That is because neither of those is what removes them.
+Ambient pedestrians in GTA IV disappear a short distance behind the player, and the settings modders
+normally reach for do not change it. This release documents why. The population manager's removal loop
+compares each pedestrian's squared distance to the player against one of two constants, 6400 and 225,
+chosen by a per-pedestrian flag, and deletes anything beyond. Spawn density and the removal radius are
+independent, so raising density produces more pedestrians that are then deleted at the same distance.
+Because both constants live in a shared read-only pool with unrelated readers, they cannot be edited in
+place. popctl instead rewrites the four-byte displacement of each comparison instruction so it reads a
+float inside the plugin, which changes those two readers and nothing else. The same technique is
+applied to the per-frame spawn cap and to eight vehicle population statics.
 
-`CPopulation`'s removal loop walks every pedestrian each frame, takes the squared distance to the
-player and compares it against a hardcoded constant: 6400 (80 m) on one branch, 225 (15 m) on the
-other, chosen by a per-ped flag that appears to mean "on screen". Anything past that is deleted
-outright. Raising density just means the game spawns more peds that it then deletes at the same
-distance. Measured here, doubling and quadrupling the density multiplier and rewriting popcycle did
-not change the ped count past 60 m by a single ped.
+## Problem
 
-Both constants live in the shared constant pool, and the 60.0 sitting next to them has 119 other
-users, so the constants themselves cannot be edited. `popctl` instead repoints the two instructions
-that read them at floats inside its own DLL.
+The community-standard levers for crowd density are `popcycle.dat`, the density multiplier natives and
+the vehicle density command-line flags. Tested on 2026-09-06 against a pedestrian census, none of them
+moved the count past roughly 60 m:
 
-## What it changes
+| Lever | Result |
+|---|---|
+| Density multiplier ×2 | No change past 60 m |
+| Density multiplier ×4 | No change past 60 m |
+| `popcycle.dat` rewrite | No change past 60 m |
 
-| Setting | Stock | What it controls |
-|---|---|---|
-| `FarKeepMetres` | 80 | Keep radius for peds the game considers on screen |
-| `NearKeepMetres` | 15 | Keep radius for the other branch |
-| `SpawnsPerFrame` | 8 | Ambient spawn attempts per frame |
-| `[Pokes]` | various | Traffic generation band, removal distances, ambient car budget |
+That is the expected outcome once the mechanism is known. Density controls how many pedestrians are
+created; it has no bearing on the distance at which they are destroyed.
 
-Nothing is written to disk. Every change is made in memory at runtime and disappears when you quit.
+## Method
 
-## Install
+The removal loop lives at RVA `0x73AF50` and is called from the population `Process` at `0x73B540`. It
+walks the pedestrian pool, computes a squared distance, reads a per-pedestrian flag through
+`vtable+0xD4` and then byte `+0x142`, and branches to one of two `comiss` comparisons:
+
+```
+0x73B04B    comiss xmm0, [6400.0]     80 m, the on-screen branch
+0x73B054    comiss xmm0, [225.0]      15 m, everything else
+```
+
+Both operands are pool entries at `0xBE8CA4` and `0xBE8C00`. Editing a pool entry changes it for every
+instruction that reads it, and the `60.0` two entries away has 119 readers across the executable, so
+the pool is not as local as it looks. popctl rewrites the displacement inside each instruction instead.
+Neither instruction moves and no pool entry changes.
+
+Three further groups of values are plain data globals, patched directly: the per-frame ambient spawn
+cap at `0xC4594C`, and the `CVehiclePopulation` statics at `0xC3FF60` onwards.
+
+The Complete Edition's `.text` is encrypted at load, so every patch waits on a byte signature, verifies
+the displacement against the live image base, and writes only then. Any site that does not read its
+expected stock value is skipped and logged.
+
+## Findings
+
+- The removal radius, not spawn density, is what governs visible crowd depth. This is the release's
+  main result and it is the reason the three levers above do nothing.
+- The two radii are independent and serve different pedestrian classes, so both must move together or
+  the effect is uneven as pedestrians cross the on-screen flag boundary.
+- `SpawnsPerFrame` saturates at 16. The manager gathers at most sixteen candidate spawn nodes per
+  frame, so a higher cap has nothing to consume.
+- The `CVehicle` pool holds 140 entries and the factory returns null past it, which the population code
+  dereferences without checking. `VehMaxCars` at 160 crashed reliably; the shipped value is 110.
+
+**No frame-time measurements were taken.** Keeping more entities alive costs main-thread CPU and the
+cost was never quantified. Nothing here should be read as a performance claim in either direction.
+
+## Figures
+
+Generated by [`docs/make_figures.py`](docs/make_figures.py) from the addresses, the shipped config and
+a real session log. Nothing in them is modelled.
+
+| | |
+|---|---|
+| [Where a pedestrian is deleted](docs/figures/fig1_mechanism.png) | The removal loop, the branch, the two comparisons |
+| [Why not simply change the number?](docs/figures/fig2_constant_pool.png) | The shared constant pool and its other readers |
+| [Keep radius, drawn to scale](docs/figures/fig3_radius.png) | Stock against the shipped configuration |
+| [Levers that do not move it](docs/figures/fig4_levers.png) | What was tried before the loop was located |
+| [Every value popctl changes](docs/figures/fig5_settings.png) | Address, stock, shipped, purpose |
+
+## Explainer
+
+A short animated walkthrough of the problem, the mechanism and the fix:
+[`docs/video/popctl_explainer.mp4`](docs/video/popctl_explainer.mp4). Source, in Manim, is
+[`docs/video/explainer.py`](docs/video/explainer.py).
+
+## Installation
 
 1. Have an ASI loader present. Ultimate ASI Loader as `dinput8.dll` is the usual one, and if you run
    FusionFix you already have it.
-2. Drop `popctl.asi` and `popctl.ini` into your `GTAIV` folder, next to `GTAIV.exe`.
-3. Launch. `popctl.log` appears next to the `.asi` and says what was patched.
+2. Put `popctl.asi` and `popctl.ini` in your `GTAIV` folder, next to `GTAIV.exe`.
+3. Launch. `popctl.log` appears next to the plugin and records every patch attempt and its outcome.
 
-To uninstall, delete both files.
+To uninstall, delete both files. Nothing is written to disk by the plugin and no game file is modified.
 
 ## Configuration
 
-Everything lives in `popctl.ini`, which is commented in full. The two settings worth knowing:
-
-`FarKeepMetres` is the one you came for. 120 gives busy streets a block ahead of you. Every ped kept
-alive costs main-thread CPU, so this is the first number to lower if your frame time suffers.
-
-`SpawnsPerFrame` above 16 does nothing. The population manager only gathers up to 16 candidate spawn
-nodes per frame, so 16 is the real ceiling and simply doubles the stock fill rate.
-
-The `[Pokes]` section takes raw `RVA,type,stock,new` entries against the `CVehiclePopulation` block.
-The shipped ones widen the traffic generation band and raise the ambient car budget. A poke is only
-written if the address still reads its stock value, so a wrong entry is a no-op that gets logged
-rather than a crash.
-
-**Do not raise `VehMaxCars` towards 140.** The `CVehicle` pool has 140 slots, the factory returns NULL
-past that, and the population code dereferences the result without checking. 160 crashes reliably.
+`popctl.ini` is commented in full. `FarKeepMetres` is the setting that matters; it is also the first
+one to lower if frame time suffers. The `[Pokes]` section takes raw `RVA,type,stock,new` entries, and a
+value is written only while the address still reads its stock value.
 
 ## Limitations
 
 These are the boundaries of what was tested. Nothing outside them should be assumed to work.
 
-- **Complete Edition 1.2.0.59 only.** Every address here is a hardcoded RVA for that exact build.
-  On any other version the signature check fails, nothing is patched, and the log says so. It will not
-  damage anything, it simply will not do anything.
-- **Costs CPU.** Keeping peds and cars alive is not free, and GTA IV's population work is on the main
-  thread. Raising the radius trades frame time for crowds. How much depends entirely on your CPU and
-  the rest of your mod stack.
-- **Does not raise the pool ceilings.** This changes how long the game keeps what it spawned; it does
-  not enlarge the ped or vehicle pools. `VehMaxCars` is bounded by the stock 140-slot pool.
-- **One machine.** Developed and tested on a single install with FusionFix loaded through an ASI
-  loader. Other mod stacks are untested.
-- **Patches are in memory only.** Nothing on disk changes, and nothing persists after you quit.
+- **Complete Edition 1.2.0.59 only.** Every address is a hardcoded RVA for that exact build. On any
+  other version the signature check fails, nothing is patched, and the log says so.
+- **No performance characterisation.** See Findings. The CPU cost of a larger radius is real and
+  unmeasured.
+- **One machine, one mod stack.** Developed against a single install with FusionFix loaded through an
+  ASI loader.
+- **Pool ceilings are unchanged.** This governs how long the game keeps what it spawned. It does not
+  enlarge the pedestrian or vehicle pools, and `VehMaxCars` remains bounded by the 140-entry pool.
+- **The on-screen flag is inferred.** The per-pedestrian byte at `+0x142` behaves like an on-screen
+  test and is treated as one. Its exact semantics were not confirmed.
+
+## Reproducibility and future work
+
+The findings above are one system's observations. Anyone reproducing them should report game build,
+the levers changed, and the method used to count pedestrians by distance. The obvious next steps are a
+frame-time cost curve against `FarKeepMetres`, a proper bisect of the `VehMaxCars` crash threshold, and
+confirming the `+0x142` flag semantics.
 
 ## Building
 
-Windows, Visual Studio 2022 with the x86 toolchain:
+Windows, Visual Studio 2022 with the x86 toolchain. Single translation unit, no dependencies beyond
+the Win32 SDK. Every commit is built by public GitHub Actions.
 
 ```
 .\build.ps1            # produces popctl.asi
 .\build.ps1 -Deploy    # and copies it into the game folder
 ```
-
-Single translation unit, no dependencies beyond the Win32 SDK.
 
 ## License
 
