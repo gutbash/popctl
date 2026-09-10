@@ -1,0 +1,49 @@
+[size=5][b]popctl: population control for GTA IV: The Complete Edition[/b][/size]
+[i]Keeps pedestrians and traffic alive at the distances you choose, instead of the distances the engine hardcodes. Source and issues: [url=https://github.com/gutbash/popctl]github.com/gutbash/popctl[/url][/i]
+
+[size=4][b]The problem[/b][/size]
+Crowds in GTA IV evaporate a short way behind you, and no amount of popcycle.dat editing or density multiplier tuning fixes it. That is because neither of those is what removes them.
+
+The population manager walks every pedestrian each frame, takes the distance to the player and compares it against a hardcoded constant: 80 metres on one branch, 15 on the other, chosen by a per-ped flag that appears to mean "on screen". Anything past that is deleted outright. Raising density just means the game spawns more peds that it then deletes at the same distance. Measured here, doubling and quadrupling the density multiplier and rewriting popcycle did not change the ped count past 60 metres by a single ped.
+
+Both constants sit in a shared constant pool, and the value next to them has 119 other users, so the constants themselves cannot be edited. popctl instead repoints the two instructions that read them at its own values.
+
+[size=4][b]What it changes[/b][/size]
+[list]
+[*][b]FarKeepMetres[/b] (stock 80) - keep radius for peds the game considers on screen. This is the one you came for. 120 gives you busy streets a block ahead.
+[*][b]NearKeepMetres[/b] (stock 15) - keep radius for the other branch.
+[*][b]SpawnsPerFrame[/b] (stock 8) - ambient spawn attempts per frame. Values above 16 do nothing, because 16 is all the game gathers.
+[*][b][Pokes][/b] - traffic generation band, removal distances and the ambient car budget, as raw entries against the vehicle population block.
+[/list]
+Nothing is written to disk. Every change is made in memory at runtime and disappears when you quit.
+
+[size=4][b]Installation[/b][/size]
+[list=1]
+[*]Have an ASI loader present. Ultimate ASI Loader as dinput8.dll is the usual one, and if you run FusionFix you already have it.
+[*]Drop popctl.asi and popctl.ini into your GTAIV folder, next to GTAIV.exe.
+[*]Launch. popctl.log appears next to the .asi and says exactly what was patched.
+[/list]
+To uninstall, delete both files.
+
+[size=4][b]Tuning[/b][/size]
+popctl.ini is commented in full. Every kept ped and car costs main-thread CPU, so FarKeepMetres is the first number to lower if your frame time suffers.
+
+[b]Do not raise VehMaxCars towards 140.[/b] The vehicle pool has 140 slots, the game's factory returns nothing past that, and the population code uses the result without checking it. 160 crashes reliably. The shipped value of 110 is deliberate.
+
+[size=4][b]Limitations[/b][/size]
+These are the boundaries of what was tested. Nothing outside them should be assumed to work.
+[list]
+[*][b]Complete Edition 1.2.0.59 only.[/b] Every address is a hardcoded offset for that exact build. On any other version the check fails, nothing is patched, and the log says so. It will not damage anything, it simply will not do anything.
+[*][b]It costs CPU.[/b] Keeping peds and cars alive is not free, and GTA IV's population work runs on the main thread. This trades frame time for crowds, and how much depends on your CPU and the rest of your mod stack.
+[*][b]It does not raise the pool ceilings.[/b] This changes how long the game keeps what it spawned; it does not enlarge the ped or vehicle pools.
+[*][b]One machine.[/b] Developed and tested on a single install with FusionFix loaded through an ASI loader. Other mod stacks are untested.
+[/list]
+
+[size=4][b]Why the file may be flagged[/b][/size]
+An .asi is a Windows DLL, and Nexus automatically quarantines uploads containing compiled code until a human reviews them. That is a rule about file types, not a detection. The full source is on GitHub under MIT, every binary is built from that source by public GitHub Actions, and you are welcome to build it yourself instead of trusting the upload.
+
+[size=4][b]Companion mod[/b][/size]
+[url=https://github.com/gutbash/revd]revd[/url] lifts GTA IV's twenty-five engine audio slot ceiling, which is what makes most cars in dense traffic silent. Separate mod, separate job, works fine alongside this one or without it.
+
+[size=4][b]License[/b][/size]
+MIT. Do what you like with it, including shipping it inside your own mod pack.
