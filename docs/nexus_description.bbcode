@@ -51,8 +51,10 @@ These are the boundaries of what was tested. Nothing outside them should be assu
 [size=4][b]Reproducibility[/b][/size]
 The findings above are one system's observations. Anyone reproducing them should report game build, the levers changed, and the method used to count pedestrians by distance. The obvious next steps are a frame-time cost curve against FarKeepMetres, a proper bisect of the VehMaxCars crash threshold, and confirming the flag semantics.
 
-[size=4][b]Why the file may be flagged[/b][/size]
-An .asi is a Windows DLL, and Nexus automatically quarantines uploads containing compiled code until a human reviews them. That is a rule about file types, not a detection. The full source is on GitHub under MIT, every binary is built from that source by public GitHub Actions, and you are welcome to build it yourself instead of trusting the upload.
+[size=4][b]Verifying what you downloaded[/b][/size]
+The full source is on GitHub under MIT, and every binary is built from that source by public GitHub Actions, so you can read the build log or build it yourself rather than taking the upload on trust. It is a single translation unit with no dependencies beyond the Win32 SDK.
+
+popctl.asi SHA-256 e5ee804cb323b75168ac2774d70c3978fa311590ac390e27a5fb30c8b8158dbf
 
 [size=4][b]Companion release[/b][/size]
 [url=https://github.com/gutbash/revd]revd[/url] lifts GTA IV's twenty-five slot engine audio ceiling, which is what silences most cars in dense traffic. Separate limit, separate fix, independent of this one. If you use popctl to raise traffic variety you will meet that ceiling, so the two are worth reading together.
