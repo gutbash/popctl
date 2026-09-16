@@ -33,8 +33,8 @@ cx, cy = 70.0, 50.0
 ar = H / W  # keep circles round in axis units
 
 
-# biggest ring (160 m) is 35 y-units in radius, so the rings sit inside the banner
-Y_PER_M = 35.0 / 160.0
+# biggest ring (130 m) is 35 y-units in radius, so the rings sit inside the banner
+Y_PER_M = 35.0 / 130.0
 
 
 def ring(r_m, color, fill, dash=None, width=2):
@@ -45,14 +45,14 @@ def ring(r_m, color, fill, dash=None, width=2):
                   fillcolor=fill, layer="below")
 
 
-ring(160, AQUA, "rgba(25,158,112,0.08)")
+ring(130, AQUA, "rgba(25,158,112,0.08)")
 ring(115, BLUE, "rgba(57,135,229,0.11)")
 ring(74, ORANGE, "rgba(217,89,38,0.18)")
 
 fig.add_trace(go.Scatter(x=[cx], y=[cy], mode="markers",
                          marker=dict(size=7, color=INK), hoverinfo="skip"))
 
-for y, col, txt in ((68, AQUA, "160 m   popctl"),
+for y, col, txt in ((68, AQUA, "130 m   popctl"),
                     (52, BLUE, "115 m   stock, on paper"),
                     (36, ORANGE, "74 m   stock, measured")):
     label(fig, 85.5, y, txt, 15, col, SANS, anchor="left")

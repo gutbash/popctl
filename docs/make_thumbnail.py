@@ -25,7 +25,7 @@ ar = H / W
 
 # ---- right: the keep radius, thick enough to read tiny
 cx, cy = 71.0, 50.0
-Y_PER_M = 40.0 / 160.0
+Y_PER_M = 40.0 / 130.0
 
 
 def ring(r_m, color, fill, width):
@@ -35,7 +35,7 @@ def ring(r_m, color, fill, width):
                   line=dict(color=color, width=width), fillcolor=fill, layer="below")
 
 
-ring(160, AQUA, "rgba(25,158,112,0.13)", 9)
+ring(130, AQUA, "rgba(25,158,112,0.13)", 9)
 ring(115, BLUE, "rgba(57,135,229,0.22)", 9)
 ring(74, ORANGE, "rgba(217,89,38,0.55)", 7)
 
@@ -47,7 +47,7 @@ label(fig, 7.5, 43, "stay loaded further out", 50, INK2, SERIF, anchor="left")
 
 label(fig, 7.5, 27, "74 m", 86, ORANGE, SANS, anchor="left")
 label(fig, 21.5, 26, "to", 46, MUTED, SERIF, anchor="left")
-label(fig, 27.5, 27, "160 m", 86, AQUA, SANS, anchor="left")
+label(fig, 27.5, 27, "130 m", 86, AQUA, SANS, anchor="left")
 
 fig.write_image(os.path.join(OUT, "thumbnail.png"), scale=1)
 print("wrote", os.path.join(OUT, "thumbnail.png"))
