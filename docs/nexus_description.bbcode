@@ -1,35 +1,37 @@
 [size=5][b]popctl: population control for GTA IV: The Complete Edition[/b][/size]
 [i]A research release. Source, figures, trace logs and issues: [url=https://github.com/gutbash/popctl]github.com/gutbash/popctl[/url][/i]
 
-[size=4][b]What you will see[/b][/size]
-Denser crowds that reach further down the street, and that stop vanishing in groups while you watch. The stock game holds at most 150 far pedestrians and cuts the visible crowd off wherever the 138th-farthest one stands, a median 74 metres on a busy block, in batches, whether or not you are looking. With popctl 0.2 there are 300, the batch cull never takes a pedestrian the camera can see, and the crowd is kept and spawned out to 130 metres.
-
-What you will not see: more people inside about 30 metres (those are full peds from a separate pool of 120 that popctl does not grow); a full street behind you when you turn round (the pool is finite, and when it is full the farthest off-camera pedestrians go first); any change in subway stations or other interiors (scenario points and the popcycle interior column, neither touched); textured pedestrians past the texture streaming range (stock deleted them before you could see it, popctl keeps them, and past roughly 100 metres they draw grey; VisibleKeepMetres is the lever); denser traffic (see Limitations).
-
 [size=4][b]Explainer[/b][/size]
 [youtube]82yKo4NCL_g[/youtube]
 
-[size=4][b]0.2: what 0.1 got wrong[/b][/size]
-popctl 0.1 located a distance cull in the population manager and moved it, and shipped with the claim that this was the mechanism. It was not. A user reported that nothing changed and that pedestrians still vanished at a fixed distance. Both observations were correct, and this release exists because of them.
+[size=4][b]Abstract[/b][/size]
+Ambient pedestrians in GTA IV vanish in groups at what looks like a fixed distance in front of the player, and no density setting changes it. The distance is not a constant. Pedestrians beyond roughly 30 m are lightweight dummy peds in a pool of 150 slots, and the population manager, whenever fewer than twelve slots are free, deletes the farthest entries at up to twenty per frame with no visibility test. On any busy street the pool is within twelve of full, so the crowd ends wherever the 138th-farthest pedestrian stands: a median 74 m on the test route, in batches, on camera. popctl 0.2 replaces that cull with one of the same budget that only takes pedestrians the camera cannot see, grows the pool to 300 together with the twelve engine pools sized to it, and moves the shared keep and spawn distances to 130 m. Every claim here comes from a hook on the one function all 49 removal paths pass through, which ships in the plugin as an option.
 
-Hooking the one function every pedestrian removal passes through, and logging each deletion's caller, distance and whether the camera could see it, showed that the cull 0.1 patched never deletes a pedestrian you can see. It accounted for 25 deletions out of 9,485 in a three-minute run. The visible cut-off comes from somewhere else entirely.
+[size=4][b]Problem[/b][/size]
+The community-standard levers for crowd density are popcycle.dat, the density multiplier natives and the vehicle density command-line flags. Tested against a pedestrian census on 2026-09-06, none of them moved the count past roughly 60 m.
 
-[size=4][b]Mechanism[/b][/size]
-Ambient pedestrians beyond roughly 30 metres are not full peds. They are lightweight dummy peds in a second pool of 150 slots, swapped for a full ped as you walk up and back as you leave. Stock GTA IV runs that pool full on any busy street. When it has fewer than twelve free slots, the manager deletes the farthest entries, up to twenty per frame, with no visibility test. So the crowd ends wherever the 138th-farthest pedestrian happens to stand: a median 74 metres on the test route, as close as 5. That is why it looks like a fixed radius, why it happens in groups, and why no distance setting moved it.
+popctl 0.1 then located a distance cull in the population manager at RVA 0x73AF50, comparing squared distance against 6400 (80 m) or 225 (15 m), and moved both. It shipped with the claim that this was the mechanism. Users reported no visible change and that pedestrians still vanished in groups. Both reports were correct: that loop skips every pedestrian the camera can see, so raising its distances changed what survived behind the player and nothing else. In a three-minute run it accounted for 25 deletions out of 9,485.
 
-The spawner fills whatever it is given. At 150, 300 and 450 slots the pool sat within twelve of full for the whole session. Capacity sets the density, not spawn rate: 0.1's doubled spawn rate only churned the pool faster and fired the batch cull more often.
+[size=4][b]Method[/b][/size]
+[b]Trace.[/b] Every population cull ends in RemovePed at RVA 0x73BCD0. popctl hooks it (TraceRemovals = 1) and writes one line per deletion: the return address and two above it, the pool the entity came from, its distance from the player, whether the camera could see it, the flags the engine consulted, and the fill of both pools. Three hands-free runs of the same 180 s camera route through northern Algonquin were traced (stock, 0.1, 0.2), plus several hours of play on Star Junction.
 
-[size=4][b]What 0.2 does[/b][/size]
+[b]Mechanism.[/b] The disassembly then explained each caller. Ambient pedestrians beyond about 30 m are dummy peds (entity type 6, 944 bytes, pool 0x14B6F10, 150 slots), swapped for a full CPed (pool 0x14B6F1C, 120 slots) as the player approaches and back as they leave. The population code walks both pools with parallel functions:
 [list]
-[*]Replaces the batch cull with one of the same budget that only ever takes pedestrians the camera cannot see. If everything is in view, spawning pauses instead.
-[*]Grows the far-ped pool from 150 to 300, together with the twelve engine pools sized to the ped count (the record pool at exactly 120+150, three named pools at exactly 300, six animation pools at multiples of 300). Each was found by enumerating the executable's pool constructors, after two crashes showed the game writes through a null from any of them. Every immediate is verified against its stock value before anything is written; the live pool sizes are logged after the game creates them.
-[*]Moves the keep distances to 130 metres for peds on camera, off camera, and never seen alike, so pool pressure rather than a fixed radius decides what survives behind you. Moves the spawner's far edge from 105 to 130 to match, so pop-in lands at the crowd's edge instead of inside it.
-[*]Returns spawns per frame to the stock 8.
-[*]Ships the trace as an option: TraceRemovals = 1 writes one line per deleted pedestrian to popctl_trace.log with the cull path, distance, visibility and pool fill. It is how everything here was measured and it is the first thing to turn on if you think popctl is not doing what it says.
+[*]0x738430, far pool nearly full: under 12 free slots, delete the farthest, up to 20 per frame, no visibility test.
+[*]0x737240, band cull, both pools: past 115 m deleted even on camera (x1.5 for peds flagged seen); 70 to 115 m deleted if off camera and never flagged; 2.5 to 3.5 s grace timer. Plain floats at 0xC45994 and 0xC45990.
+[*]0x73AF50 and 0x738620, off-camera culls: past 80 m if flagged seen, else 15 m, immediate. This is all 0.1 patched.
+[*]0x73C640 and 0x73C8C0: conversion between the pools; the pedestrian is replaced in place.
 [/list]
+Every one of them skips a pedestrian whose mission flag is set.
+
+[b]Cull replacement.[/b] 0x738430 is replaced by a function with the same contract and budget that walks the pool, sorts by distance, and skips any candidate the camera can see. If every far pedestrian is in view, nothing is deleted and spawning pauses, which the spawner already handles: it checks free slots before creating.
+
+[b]Pool growth.[/b] The far pool's size is four immediates in its constructor at 0x1C41E0. Growing only that crashed within a minute, twice, and each dump named the next dependency: a record pool sized exactly 120 + 150 (0x1C3F70), then an animation blender from a named pool of 300. The game does not null-check either. Enumerating the executable's 46 named pools and two template constructors gave the full set: three pools at exactly 300 (CAnimBlender, CDummyTask, Event) and six animation pools at multiples of 300. popctl scales all of them by (120 + far) / 270, verifies every immediate against its stock value first, writes none if any one fails, and reads the live pool headers back after the game constructs them.
+
+[b]Distances.[/b] The band floats are written directly. The off-camera constants are shared read-only pool entries, so the comiss displacements at 0x73B04B, 0x73B054 and 0x738700 are repointed at floats inside the plugin. The spawner's far edge (0xC45980, stock 105) is moved to match.
 
 [size=4][b]Findings[/b][/size]
-Three hands-free runs of the same 180-second route, every deletion logged:
+Deletions in 180 s on the same route, every one logged:
 [code]                          stock     popctl 0.1    popctl 0.2
 far pool size             150       150           300
 far pool fill, median     135       135           288
@@ -39,27 +41,47 @@ deletions, all paths      8,129     9,485         11,031
   median distance         74 m      74 m          n/a
 the cull 0.1 patched      21        25            0
 average frame rate        50.1      53.2          50.3[/code]
-450 far peds broke physics on the test machine: peds and the player jittered vertically and fell through the map, which is what a starved frame budget does to the collision step. 300 ran clean for a full session. Frame rate on the route was within run-to-run noise. One route, one machine; not a performance characterisation.
+[list]
+[*][b]The visible cut-off is pool pressure, not a distance constant.[/b] The far pool sat within twelve of full for the whole route in every configuration. That is why it looks like a fixed radius, why it happens in groups, and why no distance setting moved it.
+[*][b]The spawner fills whatever it is given.[/b] At 150, 300 and 450 slots the pool was full within seconds. Capacity sets density; 0.1's doubled spawn rate only churned the pool faster and fired the batch cull more often. 0.2 returns it to stock.
+[*][b]450 far peds broke physics on the test machine.[/b] With the pool at 438 of 450, peds and the player jittered vertically and fell through the map, which is what a starved frame budget does to the collision step. 300 ran clean for a full session and is the shipped value.
+[*][b]Distance settings above the spawn band do nothing you can see.[/b] Once the batch cull no longer takes visible peds, the crowd's front edge is where the spawner stops placing them, 105 m in stock. 130 and 160 m looked identical until the spawn band moved with them.
+[*][b]Conversions are not despawns.[/b] The two largest remaining callers replace a far ped with a full ped at about 30 m and back. The replacement stands where the original did.
+[*]Frame rate on the route was within run-to-run noise across the three configurations. One route, one machine; not a performance characterisation.
+[/list]
 
 [size=4][b]Installation[/b][/size]
 [list=1]
 [*]Have an ASI loader present. Ultimate ASI Loader as dinput8.dll is the usual one, and if you run FusionFix you already have it.
 [*]Put popctl.asi and popctl.ini in your GTAIV folder, next to GTAIV.exe.
-[*]Launch. popctl.log appears next to the plugin and records every patch attempt and its outcome, including the live size of each pool.
+[*]Launch. popctl.log records every patch attempt and its outcome.
 [/list]
-To uninstall, delete both files. Nothing is written to disk by the plugin and no game file is modified. Upgrading from 0.1: replace both files.
+To uninstall, delete both files. Nothing is written to disk by the plugin and no game file is modified. Upgrading from 0.1: replace both files; the old FarKeepMetres key is still read.
 
-popctl.ini is commented in full. FarPedPool is the setting that matters and 300 is the tested value. Lower VisibleKeepMetres if the grey far-ped models or the pop-in bother you more than crowd depth.
+[size=4][b]Verifying[/b][/size]
+popctl.log is the source of truth. These lines mean it worked:
+[code]pools: far pool 150 -> 300
+pools: ped records 270 -> 420
+patched: visible 130 m, hidden 130 m, near 130 m
+pool cull: 0x738430 replaced; off-camera far peds go first, on-camera ones are never taken
+pools: peds 120 x 3824 bytes, far peds 300 x 944 bytes, ped records 420 x 400 bytes[/code]
+If any is missing, the log names the check that failed. TraceRemovals = 1 then shows you every deletion the game makes, with the path that made it.
 
 [size=4][b]Limitations[/b][/size]
+These are the boundaries of what was tested. Nothing outside them should be assumed to work.
 [list]
 [*][b]Complete Edition 1.2.0.59 only.[/b] Every address is a hardcoded offset for that exact build. On any other version the checks fail, nothing is patched, and the log says so.
-[*][b]The vehicle pool cannot be grown this way.[/b] 140 to 200 with the car budget at 150 crashed after three minutes with the CPU jumping into a data address, the signature of a 140-entry table indexed by vehicle slot. The dump is in the repository. Traffic stays bounded by the 110-car budget as before.
-[*][b]The full-ped pool is not grown.[/b] It peaked at 111 of 120 during play. Its dependents were not enumerated.
+[*][b]The full-ped pool is not grown.[/b] The 120 real peds within about 30 m peaked at 111 during play. Density close to the player does not change. Its dependents were not enumerated.
+[*][b]Behind you, the crowd thins with distance.[/b] The pool is finite; when it is full the farthest off-camera pedestrians go first. Every view being ready needs more slots than the frame budget allowed.
+[*][b]The vehicle pool cannot be grown this way.[/b] 140 to 200 with the car budget at 150 crashed after three minutes with the CPU jumping into a data address, the signature of a 140-entry table indexed by vehicle slot. The dump is in the repository. Traffic stays bounded by the 110-car budget.
+[*][b]Interiors are unaffected.[/b] Subway stations and other interiors are populated by scenario points and the popcycle interior column, neither touched.
+[*][b]Texture streaming is out of scope.[/b] Far peds past roughly 100 m draw untextured. Stock deleted them before you could see it. Lower VisibleKeepMetres if that bothers you more than crowd depth.
 [*][b]One machine, one mod stack.[/b] A camera flythrough for the numbers, play on Star Junction for the rest, FusionFix loaded.
-[*][b]Texture streaming is out of scope.[/b] Far peds past roughly 100 metres draw untextured.
 [*][b]The "seen" flag is inferred[/b] from how the engine uses it.
 [/list]
+
+[size=4][b]Reproducibility[/b][/size]
+Turn on TraceRemovals, play, and read popctl_trace.log; docs/make_figures.py in the repository charts any trace. Anyone reproducing the numbers above should report game build, the route or play pattern, and the pool sizes from popctl.log. The open questions are the frame-time cost curve against FarPedPool, the full-ped pool's dependents, which table the vehicle pool overran, and the flag semantics.
 
 [size=4][b]Verifying what you downloaded[/b][/size]
 The full source is on GitHub under MIT, and every binary is built from that source by public GitHub Actions, so you can read the build log or build it yourself rather than taking the upload on trust. It is a single translation unit with no dependencies beyond the Win32 SDK.
