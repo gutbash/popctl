@@ -25,7 +25,7 @@ ar = H / W
 
 # ---- right: the keep radius, thick enough to read tiny
 cx, cy = 71.0, 50.0
-Y_PER_M = 40.0 / 120.0
+Y_PER_M = 40.0 / 160.0
 
 
 def ring(r_m, color, fill, width):
@@ -35,9 +35,9 @@ def ring(r_m, color, fill, width):
                   line=dict(color=color, width=width), fillcolor=fill, layer="below")
 
 
-ring(120, AQUA, "rgba(25,158,112,0.13)", 9)
-ring(80, BLUE, "rgba(57,135,229,0.22)", 9)
-ring(15, ORANGE, "rgba(217,89,38,0.55)", 7)
+ring(160, AQUA, "rgba(25,158,112,0.13)", 9)
+ring(115, BLUE, "rgba(57,135,229,0.22)", 9)
+ring(74, ORANGE, "rgba(217,89,38,0.55)", 7)
 
 # ---- left: wordmark and the one number that matters
 label(fig, 7, 70, "popctl", 150, INK, SERIF, anchor="left")
@@ -45,9 +45,9 @@ fig.add_shape(type="line", x0=7.5, y0=58, x1=42, y1=58, line=dict(color=AQUA, wi
 label(fig, 7.5, 50, "pedestrians and traffic", 50, INK2, SERIF, anchor="left")
 label(fig, 7.5, 43, "stay loaded further out", 50, INK2, SERIF, anchor="left")
 
-label(fig, 7.5, 27, "80 m", 86, ORANGE, SANS, anchor="left")
+label(fig, 7.5, 27, "74 m", 86, ORANGE, SANS, anchor="left")
 label(fig, 21.5, 26, "to", 46, MUTED, SERIF, anchor="left")
-label(fig, 27.5, 27, "120 m", 86, AQUA, SANS, anchor="left")
+label(fig, 27.5, 27, "160 m", 86, AQUA, SANS, anchor="left")
 
 fig.write_image(os.path.join(OUT, "thumbnail.png"), scale=1)
 print("wrote", os.path.join(OUT, "thumbnail.png"))

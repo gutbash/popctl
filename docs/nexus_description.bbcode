@@ -1,63 +1,73 @@
 [size=5][b]popctl: population control for GTA IV: The Complete Edition[/b][/size]
-[i]A research release. Source, figures and issues: [url=https://github.com/gutbash/popctl]github.com/gutbash/popctl[/url][/i]
+[i]A research release. Source, figures, trace logs and issues: [url=https://github.com/gutbash/popctl]github.com/gutbash/popctl[/url][/i]
 
-[size=4][b]Abstract[/b][/size]
-Ambient pedestrians in GTA IV disappear a short distance behind the player, and the settings modders normally reach for do not change it. This release documents why. The population manager's removal loop compares each pedestrian's squared distance to the player against one of two constants, 6400 and 225, chosen by a per-pedestrian flag, and deletes anything beyond. Spawn density and the removal radius are independent, so raising density produces more pedestrians that are then deleted at the same distance. Because both constants live in a shared read-only pool with unrelated readers, they cannot be edited in place. popctl instead rewrites the four-byte displacement of each comparison instruction so it reads a float inside the plugin, which changes those two readers and nothing else. The same technique is applied to the per-frame spawn cap and to eight vehicle population statics.
+[size=4][b]What you will see[/b][/size]
+Denser crowds that reach further down the street, and that stop vanishing in groups while you watch. The stock game holds at most 150 far pedestrians and cuts the visible crowd off wherever the 138th-farthest one stands, a median 74 metres on a busy block, in batches, whether or not you are looking. With popctl 0.2 there are 300, the batch cull never takes a pedestrian the camera can see, and the crowd is kept and spawned out to 130 metres.
 
-[size=4][b]Problem[/b][/size]
-The community-standard levers for crowd density are popcycle.dat, the density multiplier natives and the vehicle density command-line flags. Tested on 2026-09-06 against a pedestrian census, none of them moved the count past roughly 60 metres: density multiplier at two times, no change; at four times, no change; a popcycle.dat rewrite, no change.
+What you will not see: more people inside about 30 metres (those are full peds from a separate pool of 120 that popctl does not grow); a full street behind you when you turn round (the pool is finite, and when it is full the farthest off-camera pedestrians go first); any change in subway stations or other interiors (scenario points and the popcycle interior column, neither touched); textured pedestrians past the texture streaming range (stock deleted them before you could see it, popctl keeps them, and past roughly 100 metres they draw grey; VisibleKeepMetres is the lever); denser traffic (see Limitations).
 
-That is the expected outcome once the mechanism is known. Density controls how many pedestrians are created. It has no bearing on the distance at which they are destroyed.
+[size=4][b]Explainer[/b][/size]
+[youtube]Bs4IWBdebKQ[/youtube]
 
-[size=4][b]Method[/b][/size]
-The removal loop lives at RVA 0x73AF50 and is called from the population Process at 0x73B540. It walks the pedestrian pool, computes a squared distance, reads a per-pedestrian flag through vtable+0xD4 and then byte +0x142, and branches to one of two comparisons:
-[code]0x73B04B    comiss xmm0, [6400.0]     80 m, the on-screen branch
-0x73B054    comiss xmm0, [225.0]      15 m, everything else[/code]
-Both operands are entries in a shared constant pool. Editing a pool entry changes it for every instruction that reads it, and the 60.0 two entries away has 119 readers across the executable, so the pool is not as local as it looks. popctl rewrites the displacement inside each instruction instead. Neither instruction moves and no pool entry changes.
+[size=4][b]0.2: what 0.1 got wrong[/b][/size]
+popctl 0.1 located a distance cull in the population manager and moved it, and shipped with the claim that this was the mechanism. It was not. A user reported that nothing changed and that pedestrians still vanished at a fixed distance. Both observations were correct, and this release exists because of them.
 
-Three further groups of values are plain data globals, patched directly: the per-frame ambient spawn cap at 0xC4594C, and the CVehiclePopulation statics at 0xC3FF60 onwards.
+Hooking the one function every pedestrian removal passes through, and logging each deletion's caller, distance and whether the camera could see it, showed that the cull 0.1 patched never deletes a pedestrian you can see. It accounted for 25 deletions out of 9,485 in a three-minute run. The visible cut-off comes from somewhere else entirely.
 
-The Complete Edition's .text is encrypted at load, so every patch waits on a byte signature, verifies the displacement against the live image base, and writes only then. Any site that does not read its expected stock value is skipped and logged.
+[size=4][b]Mechanism[/b][/size]
+Ambient pedestrians beyond roughly 30 metres are not full peds. They are lightweight dummy peds in a second pool of 150 slots, swapped for a full ped as you walk up and back as you leave. Stock GTA IV runs that pool full on any busy street. When it has fewer than twelve free slots, the manager deletes the farthest entries, up to twenty per frame, with no visibility test. So the crowd ends wherever the 138th-farthest pedestrian happens to stand: a median 74 metres on the test route, as close as 5. That is why it looks like a fixed radius, why it happens in groups, and why no distance setting moved it.
+
+The spawner fills whatever it is given. At 150, 300 and 450 slots the pool sat within twelve of full for the whole session. Capacity sets the density, not spawn rate: 0.1's doubled spawn rate only churned the pool faster and fired the batch cull more often.
+
+[size=4][b]What 0.2 does[/b][/size]
+[list]
+[*]Replaces the batch cull with one of the same budget that only ever takes pedestrians the camera cannot see. If everything is in view, spawning pauses instead.
+[*]Grows the far-ped pool from 150 to 300, together with the twelve engine pools sized to the ped count (the record pool at exactly 120+150, three named pools at exactly 300, six animation pools at multiples of 300). Each was found by enumerating the executable's pool constructors, after two crashes showed the game writes through a null from any of them. Every immediate is verified against its stock value before anything is written; the live pool sizes are logged after the game creates them.
+[*]Moves the keep distances to 130 metres for peds on camera, off camera, and never seen alike, so pool pressure rather than a fixed radius decides what survives behind you. Moves the spawner's far edge from 105 to 130 to match, so pop-in lands at the crowd's edge instead of inside it.
+[*]Returns spawns per frame to the stock 8.
+[*]Ships the trace as an option: TraceRemovals = 1 writes one line per deleted pedestrian to popctl_trace.log with the cull path, distance, visibility and pool fill. It is how everything here was measured and it is the first thing to turn on if you think popctl is not doing what it says.
+[/list]
 
 [size=4][b]Findings[/b][/size]
-[list]
-[*]The removal radius, not spawn density, governs visible crowd depth. This is the main result, and the reason the three levers above do nothing.
-[*]The two radii serve different pedestrian classes and must move together, or the effect is uneven as pedestrians cross the on-screen flag boundary.
-[*]SpawnsPerFrame saturates at 16. The manager gathers at most sixteen candidate spawn nodes per frame, so a higher cap has nothing to consume.
-[*]The vehicle pool holds 140 entries and the factory returns null past it, which the population code dereferences without checking. VehMaxCars at 160 crashed reliably; the shipped value is 110.
-[/list]
-[b]No frame-time measurements were taken.[/b] Keeping more entities alive costs main-thread CPU and that cost was never quantified. Nothing here should be read as a performance claim in either direction.
+Three hands-free runs of the same 180-second route, every deletion logged:
+[code]                          stock     popctl 0.1    popctl 0.2
+far pool size             150       150           300
+far pool fill, median     135       135           288
+deletions, all paths      8,129     9,485         11,031
+"pool nearly full"        4,426     6,192         7,503
+  of those on camera      2,847     4,094         0
+  median distance         74 m      74 m          n/a
+the cull 0.1 patched      21        25            0
+average frame rate        50.1      53.2          50.3[/code]
+450 far peds broke physics on the test machine: peds and the player jittered vertically and fell through the map, which is what a starved frame budget does to the collision step. 300 ran clean for a full session. Frame rate on the route was within run-to-run noise. One route, one machine; not a performance characterisation.
 
 [size=4][b]Installation[/b][/size]
 [list=1]
 [*]Have an ASI loader present. Ultimate ASI Loader as dinput8.dll is the usual one, and if you run FusionFix you already have it.
 [*]Put popctl.asi and popctl.ini in your GTAIV folder, next to GTAIV.exe.
-[*]Launch. popctl.log appears next to the plugin and records every patch attempt and its outcome.
+[*]Launch. popctl.log appears next to the plugin and records every patch attempt and its outcome, including the live size of each pool.
 [/list]
-To uninstall, delete both files. Nothing is written to disk by the plugin and no game file is modified.
+To uninstall, delete both files. Nothing is written to disk by the plugin and no game file is modified. Upgrading from 0.1: replace both files.
 
-popctl.ini is commented in full. FarKeepMetres is the setting that matters, and also the first one to lower if your frame time suffers.
+popctl.ini is commented in full. FarPedPool is the setting that matters and 300 is the tested value. Lower VisibleKeepMetres if the grey far-ped models or the pop-in bother you more than crowd depth.
 
 [size=4][b]Limitations[/b][/size]
-These are the boundaries of what was tested. Nothing outside them should be assumed to work.
 [list]
-[*][b]Complete Edition 1.2.0.59 only.[/b] Every address is a hardcoded offset for that exact build. On any other version the check fails, nothing is patched, and the log says so.
-[*][b]No performance characterisation.[/b] The CPU cost of a larger radius is real and unmeasured.
-[*][b]One machine, one mod stack.[/b] Developed against a single install with FusionFix loaded through an ASI loader.
-[*][b]Pool ceilings are unchanged.[/b] This governs how long the game keeps what it spawned. It does not enlarge the pedestrian or vehicle pools.
-[*][b]The on-screen flag is inferred.[/b] The per-pedestrian byte at +0x142 behaves like an on-screen test and is treated as one. Its exact semantics were not confirmed.
+[*][b]Complete Edition 1.2.0.59 only.[/b] Every address is a hardcoded offset for that exact build. On any other version the checks fail, nothing is patched, and the log says so.
+[*][b]The vehicle pool cannot be grown this way.[/b] 140 to 200 with the car budget at 150 crashed after three minutes with the CPU jumping into a data address, the signature of a 140-entry table indexed by vehicle slot. The dump is in the repository. Traffic stays bounded by the 110-car budget as before.
+[*][b]The full-ped pool is not grown.[/b] It peaked at 111 of 120 during play. Its dependents were not enumerated.
+[*][b]One machine, one mod stack.[/b] A camera flythrough for the numbers, play on Star Junction for the rest, FusionFix loaded.
+[*][b]Texture streaming is out of scope.[/b] Far peds past roughly 100 metres draw untextured.
+[*][b]The "seen" flag is inferred[/b] from how the engine uses it.
 [/list]
-
-[size=4][b]Reproducibility[/b][/size]
-The findings above are one system's observations. Anyone reproducing them should report game build, the levers changed, and the method used to count pedestrians by distance. The obvious next steps are a frame-time cost curve against FarKeepMetres, a proper bisect of the VehMaxCars crash threshold, and confirming the flag semantics.
 
 [size=4][b]Verifying what you downloaded[/b][/size]
 The full source is on GitHub under MIT, and every binary is built from that source by public GitHub Actions, so you can read the build log or build it yourself rather than taking the upload on trust. It is a single translation unit with no dependencies beyond the Win32 SDK.
 
-popctl.asi SHA-256 e5ee804cb323b75168ac2774d70c3978fa311590ac390e27a5fb30c8b8158dbf
+popctl.asi SHA-256 2afd688dacd161810866c377ee39805c1562ec6bac519997eb73a47225989ecd
 
 [size=4][b]Companion release[/b][/size]
-[url=https://github.com/gutbash/revd]revd[/url] lifts GTA IV's twenty-five slot engine audio ceiling, which is what silences most cars in dense traffic. Separate limit, separate fix, independent of this one. If you use popctl to raise traffic variety you will meet that ceiling, so the two are worth reading together.
+[url=https://github.com/gutbash/revd]revd[/url] lifts GTA IV's twenty-five slot engine audio ceiling, which is what silences most cars in dense traffic. Separate limit, separate fix, independent of this one.
 
 [size=4][b]License[/b][/size]
 MIT. Do what you like with it, including shipping it inside your own mod pack.

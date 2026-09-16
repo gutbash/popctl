@@ -1,4 +1,4 @@
-"""popctl explainer.
+"""popctl explainer, 0.2.
 
     manim -qh explainer.py Explainer
 
@@ -38,10 +38,10 @@ class Explainer(Scene):
     def construct(self):
         self.title()
         self.problem()
-        self.false_lead()
+        self.wrong()
+        self.trace()
         self.mechanism()
         self.fix()
-        self.result()
         self.limits()
         self.outro()
 
@@ -57,7 +57,7 @@ class Explainer(Scene):
         name = T("popctl", 96, INK, SERIF)
         sub = T("population control for GTA IV", 34, INK2, SERIF)
         rule = Line(LEFT * 3.2, RIGHT * 3.2, color=AQUA, stroke_width=2)
-        tag = T("a research release", 24, MUTED, SERIF)
+        tag = T("a research release, second edition", 24, MUTED, SERIF)
         g = VGroup(name, sub, rule, tag).arrange(DOWN, buff=0.36)
         rule.set_width(5.2)
         self.play(FadeIn(name, shift=UP * 0.3), run_time=0.9)
@@ -68,65 +68,90 @@ class Explainer(Scene):
 
     # ------------------------------------------------------------------
     def problem(self):
-        head = T("Crowds vanish behind you", 46, INK, SERIF).to_edge(UP, buff=0.8)
+        head = T("Crowds vanish in front of you", 46, INK, SERIF).to_edge(UP, buff=0.8)
         self.play(FadeIn(head), run_time=0.6)
 
         player = Dot(radius=0.10, color=INK).shift(LEFT * 4.4)
         plab = T("player", 20, INK2, SERIF).next_to(player, DOWN, buff=0.22)
-
         axis = Line(LEFT * 4.4, RIGHT * 5.4, color=GRID, stroke_width=2).shift(DOWN * 0.2)
         self.play(FadeIn(player), FadeIn(plab), Create(axis), run_time=0.7)
 
-        # distance ticks
         marks = VGroup()
-        for d, x in ((15, -3.0), (80, 1.4), (120, 3.9)):
+        for d, x in ((30, -2.4), (74, 0.6), (115, 3.4)):
             t = Line(UP * 0.12, DOWN * 0.12, color=GRID).move_to([x, -0.2, 0])
             lb = T(f"{d} m", 20, MUTED, SERIF).next_to(t, DOWN, buff=0.18)
             marks.add(VGroup(t, lb))
         self.play(FadeIn(marks), run_time=0.5)
 
-        # peds
         peds = VGroup()
-        for x in (-3.6, -2.4, -1.2, 0.1, 1.0, 2.2, 3.2, 4.4):
+        for x in (-3.6, -2.8, -1.6, -0.6, 0.2, 1.1, 1.9, 2.8, 3.8, 4.6):
             peds.add(Dot(radius=0.075, color=BLUE).move_to([x, 0.45, 0]))
         self.play(LaggedStart(*[FadeIn(p, scale=0.5) for p in peds], lag_ratio=0.08), run_time=1.0)
 
-        wall = DashedLine(UP * 1.5, DOWN * 1.1, color=ORANGE, stroke_width=3).move_to([1.4, 0.2, 0])
-        wlab = T("80 m", 24, ORANGE, SERIF).next_to(wall, UP, buff=0.18)
-        self.play(Create(wall), FadeIn(wlab), run_time=0.6)
-
-        gone = VGroup(*[p for p in peds if p.get_x() > 1.4])
-        self.play(*[FadeOut(p, scale=0.3) for p in gone], run_time=0.9)
-        msg = T("deleted, every frame", 28, ORANGE, SERIF).shift(DOWN * 2.3)
+        gone = VGroup(*[p for p in peds if p.get_x() > 0.6])
+        self.play(*[FadeOut(p, scale=0.3) for p in gone], run_time=0.6)
+        msg = T("groups of them, while you watch, at a median 74 m", 26, ORANGE, SERIF).shift(DOWN * 2.3)
         self.play(FadeIn(msg), run_time=0.5)
-        self.wait(1.6)
+        self.wait(1.8)
         self.wipe()
 
     # ------------------------------------------------------------------
-    def false_lead(self):
-        head = T("The usual levers do nothing", 44, INK, SERIF).to_edge(UP, buff=0.8)
+    def wrong(self):
+        head = T("0.1 patched the wrong cull", 44, INK, SERIF).to_edge(UP, buff=0.8)
         self.play(FadeIn(head), run_time=0.6)
 
         rows = [
-            ("density multiplier  2x", "no change past 60 m"),
-            ("density multiplier  4x", "no change past 60 m"),
-            ("popcycle.dat rewrite", "no change past 60 m"),
+            ("moved the 80 m / 15 m distances", "changed only what survives behind you"),
+            ("users: nothing changed", "correct"),
+            ("users: still vanish in groups", "correct"),
         ]
         group = VGroup()
         for name, res in rows:
-            bar = rbox(10.4, 0.95, ORANGE, "#3b1d10")
-            n = T(name, 26, INK, SANS).move_to(bar.get_left() + RIGHT * 2.9)
-            r = T(res, 24, ORANGE, SERIF).move_to(bar.get_right() + LEFT * 2.3)
+            bar = rbox(11.0, 0.95, ORANGE, "#3b1d10")
+            n = T(name, 24, INK, SANS).move_to(bar.get_left() + RIGHT * 3.2)
+            r = T(res, 22, ORANGE, SERIF).move_to(bar.get_right() + LEFT * 2.7)
             group.add(VGroup(bar, n, r))
         group.arrange(DOWN, buff=0.34).shift(UP * 0.2)
         for row in group:
             self.play(FadeIn(row, shift=RIGHT * 0.2), run_time=0.45)
 
-        note = T("density decides how many are created,\nnot where they are destroyed",
+        note = T("that cull skips every ped the camera can see.\n25 deletions out of 9,485.",
                  26, INK2, SERIF).shift(DOWN * 2.6)
-        note.set_line_spacing = None
         self.play(FadeIn(note), run_time=0.7)
-        self.wait(1.8)
+        self.wait(1.9)
+        self.wipe()
+
+    # ------------------------------------------------------------------
+    def trace(self):
+        head = T("So measure it", 44, INK, SERIF).to_edge(UP, buff=0.7)
+        self.play(FadeIn(head), run_time=0.6)
+
+        hook = rbox(6.2, 0.95)
+        hook_t = T("hook RemovePed   0x73BCD0", 24, INK, MONO).move_to(hook)
+        top = VGroup(hook, hook_t).shift(UP * 1.7)
+        sub = T("the one function all 49 removal paths go through", 22, MUTED, SERIF).next_to(top, DOWN, buff=0.2)
+        self.play(FadeIn(top), FadeIn(sub), run_time=0.7)
+
+        line = T("caller  distance  on camera?  pool fill", 24, INK2, MONO).shift(DOWN * 0.3)
+        self.play(FadeIn(line), run_time=0.5)
+
+        bars = VGroup()
+        data = [("pool nearly full", 4426, ORANGE), ("conversions", 1695, MUTED),
+                ("everything else", 1987, MUTED), ("the cull 0.1 patched", 21, YELLOW)]
+        for name, n, col in data:
+            w = max(0.08, 7.0 * n / 4426)
+            bar = Rectangle(width=w, height=0.42, fill_color=col, fill_opacity=0.9, stroke_width=0)
+            lab = T(name, 20, INK2, SANS)
+            num = T(f"{n:,}", 20, col, MONO)
+            row = VGroup(lab, bar, num).arrange(RIGHT, buff=0.25, aligned_edge=LEFT)
+            lab.set_width(3.0) if lab.get_width() > 3.0 else None
+            bars.add(row)
+        bars.arrange(DOWN, buff=0.22, aligned_edge=LEFT).shift(DOWN * 1.9 + LEFT * 0.5)
+        for row in bars:
+            self.play(FadeIn(row, shift=RIGHT * 0.15), run_time=0.4)
+        cap = T("stock game, one 180 s route. 2,847 of the orange ones were on camera.", 20, MUTED, SERIF).to_edge(DOWN, buff=0.35)
+        self.play(FadeIn(cap), run_time=0.5)
+        self.wait(2.0)
         self.wipe()
 
     # ------------------------------------------------------------------
@@ -134,119 +159,77 @@ class Explainer(Scene):
         head = T("What actually deletes them", 44, INK, SERIF).to_edge(UP, buff=0.7)
         self.play(FadeIn(head), run_time=0.6)
 
-        loop = rbox(5.0, 0.95)
-        loop_t = T("removal loop   0x73AF50", 24, INK, MONO).move_to(loop)
-        top = VGroup(loop, loop_t).shift(UP * 1.9)
+        near = rbox(4.6, 1.3, GRID, PANEL)
+        near_t = VGroup(T("full peds", 26, INK, SERIF), T("120 slots, within ~30 m", 20, MUTED, SERIF)).arrange(DOWN, buff=0.1).move_to(near)
+        ng = VGroup(near, near_t).shift(LEFT * 3.2 + UP * 1.4)
 
-        flag = rbox(5.0, 0.95, YELLOW, "#332413")
-        flag_t = T("per-ped flag", 24, YELLOW, SANS).move_to(flag)
-        mid = VGroup(flag, flag_t).shift(UP * 0.45)
+        far = rbox(4.6, 1.3, GRID, PANEL)
+        far_t = VGroup(T("far peds", 26, INK, SERIF), T("150 slots, everything you see", 20, MUTED, SERIF)).arrange(DOWN, buff=0.1).move_to(far)
+        fg = VGroup(far, far_t).shift(RIGHT * 3.2 + UP * 1.4)
 
-        a1 = Arrow(top.get_bottom(), mid.get_top(), buff=0.06,
-                   color=MUTED, stroke_width=3, max_tip_length_to_length_ratio=0.2)
+        a1 = Arrow(ng.get_right(), fg.get_left(), buff=0.1, color=AQUA, stroke_width=3, max_tip_length_to_length_ratio=0.15)
+        swap = T("swapped as you walk", 18, AQUA, SERIF).next_to(a1, UP, buff=0.08)
+        self.play(FadeIn(ng), FadeIn(fg), run_time=0.6)
+        self.play(GrowArrow(a1), FadeIn(swap), run_time=0.5)
 
-        left = rbox(5.4, 1.25, BLUE, "#16283f")
-        left_t = VGroup(T("comiss xmm0, [6400.0]", 21, BLUE, MONO),
-                        T("80 m", 20, INK2, SERIF)).arrange(DOWN, buff=0.14).move_to(left)
-        lg = VGroup(left, left_t).shift(LEFT * 3.1 + DOWN * 1.5)
+        full = rbox(9.0, 1.5, ORANGE, "#3b1d10").shift(DOWN * 0.6)
+        full_t = VGroup(T("far pool nearly full: delete the farthest, 20 per frame", 24, ORANGE, SERIF),
+                        T("no visibility test. the pool is always full on a busy street.", 20, INK2, SERIF)).arrange(DOWN, buff=0.12).move_to(full)
+        a2 = Arrow(fg.get_bottom(), full.get_top(), buff=0.08, color=ORANGE, stroke_width=3, max_tip_length_to_length_ratio=0.2)
+        self.play(GrowArrow(a2), FadeIn(VGroup(full, full_t)), run_time=0.8)
 
-        right = rbox(5.4, 1.25, BLUE, "#16283f")
-        right_t = VGroup(T("comiss xmm0, [225.0]", 21, BLUE, MONO),
-                         T("15 m", 20, INK2, SERIF)).arrange(DOWN, buff=0.14).move_to(right)
-        rg = VGroup(right, right_t).shift(RIGHT * 3.1 + DOWN * 1.5)
-
-        a2 = Arrow(mid.get_bottom(), lg.get_top(), buff=0.06, color=BLUE,
-                   stroke_width=3, max_tip_length_to_length_ratio=0.2)
-        a3 = Arrow(mid.get_bottom(), rg.get_top(), buff=0.06, color=BLUE,
-                   stroke_width=3, max_tip_length_to_length_ratio=0.2)
-
-        self.play(FadeIn(top), run_time=0.5)
-        self.play(GrowArrow(a1), FadeIn(mid), run_time=0.6)
-        self.play(GrowArrow(a2), GrowArrow(a3), FadeIn(lg), FadeIn(rg), run_time=0.8)
-
-        dele = rbox(3.0, 0.8, ORANGE, "#3b1d10").shift(DOWN * 3.1)
-        dele_t = T("delete", 26, ORANGE, SERIF).move_to(dele)
-        self.play(FadeIn(VGroup(dele, dele_t)), run_time=0.5)
-        self.wait(1.8)
+        msg = T("the crowd ends wherever the 138th-farthest ped stands", 26, INK, SERIF).shift(DOWN * 2.6)
+        self.play(FadeIn(msg), run_time=0.6)
+        self.wait(2.2)
         self.wipe()
 
     # ------------------------------------------------------------------
     def fix(self):
-        head = T("Why not just change the number?", 42, INK, SERIF).to_edge(UP, buff=0.7)
+        head = T("What 0.2 does", 44, INK, SERIF).to_edge(UP, buff=0.7)
         self.play(FadeIn(head), run_time=0.6)
 
-        pool = rbox(5.0, 3.4, GRID, PANEL).shift(LEFT * 3.3 + DOWN * 0.3)
-        plab = T("constant pool", 24, INK2, SERIF).next_to(pool, UP, buff=0.2)
-        e1 = VGroup(rbox(4.2, 0.7, BLUE, "#16283f"), T("225.0", 22, BLUE, MONO))
-        e2 = VGroup(rbox(4.2, 0.7, ORANGE, "#3b1d10"), T("60.0", 22, ORANGE, MONO))
-        e3 = VGroup(rbox(4.2, 0.7, BLUE, "#16283f"), T("6400.0", 22, BLUE, MONO))
-        for e in (e1, e2, e3):
-            e[1].move_to(e[0])
-        col = VGroup(e1, e2, e3).arrange(DOWN, buff=0.3).move_to(pool)
-        self.play(FadeIn(pool), FadeIn(plab), FadeIn(col), run_time=0.8)
+        items = [
+            ("replace that cull", "same budget, never a ped the camera can see", AQUA),
+            ("far pool 150 -> 300", "plus the twelve engine pools sized to it", AQUA),
+            ("every distance -> 130 m", "keep, hidden, never-seen, and the spawn band", AQUA),
+            ("spawns per frame -> 8", "back to stock; capacity sets density, not rate", MUTED),
+        ]
+        g = VGroup()
+        for a, b, col in items:
+            bar = rbox(11.4, 0.98, col, "#0e2c22" if col == AQUA else PANEL)
+            ta = T(a, 25, col, SANS).move_to(bar.get_left() + RIGHT * 2.7)
+            tb = T(b, 21, INK2, SERIF).move_to(bar.get_right() + LEFT * 3.6)
+            g.add(VGroup(bar, ta, tb))
+        g.arrange(DOWN, buff=0.28).shift(UP * 0.1)
+        for row in g:
+            self.play(FadeIn(row, shift=RIGHT * 0.2), run_time=0.45)
 
-        warn = T("119 other readers", 24, ORANGE, SERIF).next_to(e2, RIGHT, buff=0.5)
-        self.play(FadeIn(warn), Indicate(e2, color=ORANGE, scale_factor=1.05), run_time=0.9)
-        self.wait(1.0)
-        self.play(FadeOut(warn), run_time=0.3)
-
-        right = VGroup(
-            T("popctl edits the instruction,", 30, AQUA, SERIF),
-            T("not the pool.", 30, AQUA, SERIF),
-            T("", 12),
-            T("one reader changes.", 26, INK2, SERIF),
-            T("nothing else does.", 26, INK2, SERIF),
-        ).arrange(DOWN, buff=0.22, aligned_edge=LEFT).shift(RIGHT * 3.4 + DOWN * 0.3)
-        self.play(FadeIn(right, shift=LEFT * 0.25), run_time=0.9)
-        self.wait(1.9)
-        self.wipe()
-
-    # ------------------------------------------------------------------
-    def result(self):
-        head = T("What you get", 46, INK, SERIF).to_edge(UP, buff=0.9)
-        self.play(FadeIn(head), run_time=0.6)
-
-        centre = ORIGIN + DOWN * 0.4
-        c80 = Circle(radius=1.55, color=BLUE, stroke_width=3,
-                     fill_color=BLUE, fill_opacity=0.10).move_to(centre)
-        c120 = Circle(radius=2.33, color=AQUA, stroke_width=3,
-                      fill_color=AQUA, fill_opacity=0.08).move_to(centre)
-        dot = Dot(radius=0.08, color=INK).move_to(centre)
-
-        l80 = T("80 m  stock", 24, BLUE, SANS).next_to(c80, RIGHT, buff=0.25).shift(UP * 0.9)
-        l120 = T("120 m  popctl", 24, AQUA, SANS).next_to(c120, RIGHT, buff=0.25).shift(UP * 1.5)
-
-        self.play(Create(c80), FadeIn(dot), FadeIn(l80), run_time=0.8)
-        self.play(Create(c120), FadeIn(l120), run_time=0.9)
-
-        area = T("2.25 times the ground covered", 28, INK2, SERIF).shift(DOWN * 3.2)
-        self.play(FadeIn(area), run_time=0.6)
-        self.wait(1.8)
+        foot = T("two crashes found the dependent pools. the log prints every live size.", 22, MUTED, SERIF).shift(DOWN * 2.7)
+        self.play(FadeIn(foot), run_time=0.6)
+        self.wait(2.2)
         self.wipe()
 
     # ------------------------------------------------------------------
     def limits(self):
-        head = T("What was not measured", 42, INK, SERIF).to_edge(UP, buff=0.8)
+        head = T("What it does not do", 42, INK, SERIF).to_edge(UP, buff=0.8)
         self.play(FadeIn(head), run_time=0.6)
 
         items = [
-            "frame-time cost of a larger radius",
-            "any build other than 1.2.0.59",
-            "any machine but one",
+            "more peds inside 30 m: that pool is not grown",
+            "a full street behind you: the pool is finite, far hidden peds go first",
+            "traffic: the vehicle pool overran a table and crashed",
+            "textures past ~100 m: the streamer's range, not the population's",
+            "450 far peds: physics broke on the test machine. 300 is the number",
         ]
         g = VGroup()
         for s in items:
             d = Dot(radius=0.055, color=ORANGE)
-            t = T(s, 28, INK2, SERIF)
+            t = T(s, 25, INK2, SERIF)
             g.add(VGroup(d, t).arrange(RIGHT, buff=0.35))
-        g.arrange(DOWN, buff=0.5, aligned_edge=LEFT).shift(UP * 0.1)
+        g.arrange(DOWN, buff=0.42, aligned_edge=LEFT).shift(UP * 0.1)
         for row in g:
             self.play(FadeIn(row, shift=RIGHT * 0.15), run_time=0.4)
-
-        foot = T("keeping more alive costs CPU. how much is an open question.",
-                 24, MUTED, SERIF).shift(DOWN * 2.6)
-        self.play(FadeIn(foot), run_time=0.6)
-        self.wait(1.8)
+        self.wait(2.2)
         self.wipe()
 
     # ------------------------------------------------------------------
@@ -254,8 +237,8 @@ class Explainer(Scene):
         name = T("popctl", 76, INK, SERIF)
         url = T("github.com/gutbash/popctl", 30, AQUA, MONO)
         rule = Line(LEFT * 2.6, RIGHT * 2.6, color=GRID, stroke_width=2)
-        comp = T("companion release:  revd", 26, INK2, SERIF)
-        comp2 = T("lifts the engine audio slot ceiling", 22, MUTED, SERIF)
+        comp = T("TraceRemovals = 1 shows you every deletion", 24, INK2, SERIF)
+        comp2 = T("companion release: revd, the engine audio slot ceiling", 22, MUTED, SERIF)
         lic = T("MIT   ·   one mod, one job", 22, MUTED, SERIF)
         g = VGroup(name, url, rule, comp, comp2, lic).arrange(DOWN, buff=0.3)
         rule.set_width(6.0)
